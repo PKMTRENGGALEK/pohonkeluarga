@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>Pohon Keluarga</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+      .tree > ul {
+        display: flex;
+        justify-content: center;
+        padding-top: 20px;
+      }
+      .tree > ul > li {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        position: relative;
+      }
+      .tree ul ul {
+        position: relative;
+        padding-top: 20px;
+        display: flex;
+        justify-content: center;
+      }
+      .tree li {
+        list-style-type: none;
+        position: relative;
+        padding: 20px 5px 0 5px;
+        text-align: center;
+      }
+      .tree li::before,
+      .tree li::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        border-top: 2px solid #ccc;
+        width: 50%;
+        height: 20px;
+      }
+      .tree li::before {
+        right: 50%;
+        border-right: 2px solid #ccc;
+      }
+      .tree li::after {
+        left: 50%;
+        border-left: 2px solid #ccc;
+      }
+      .tree li:only-child::before,
+      .tree li:only-child::after {
+        content: none;
+      }
+      .tree li:only-child {
+        padding-top: 0;
+      }
+      .tree li > .member {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        background: #0d6efd;
+        color: white;
+        font-weight: bold;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        flex-direction: row;
+        min-width: 200px;
+        max-width: 360px;
+        justify-content: space-between;
+        flex-wrap: wrap;
+      }
+      .tree li > .member.small {
+        min-width: 160px;
+        padding: 6px 10px;
+      }
+      .tree li > .member:hover {
+        background: #084298;
+      }
+      .tree ul ul::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 50%;
+        border-left: 2px solid #ccc;
+        height: 20px;
+      }
+      .member img {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid white;
+      }
+      .info {
+        display: flex;
+        flex-direction: column;
+      }
+      .actions {
+        display: flex;
+        gap: 3px;
+      }
+      .actions button {
+        padding: 2px 5px;
+        font-size: 0.75rem;
+      }
+    </style>
+  </head>
+  <body class="bg-light p-4">
+    <div class="container">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Pohon Keluarga</h2>
+        <div class="d-flex gap-2">
+          <button
+            class="btn btn-success"
+            data-bs-toggle="modal"
+            data-bs-target="#memberModal"
+          >
+            + Tambah Anggota
+          </button>
+          <button class="btn btn-outline-primary" onclick="downloadTree()">
+            📄 Download PDF
+          </button>
+        </div>
+      </div>
+
+      <div class="tree" id="familyTree"></div>
+      <div id="treeLoading" class="text-center my-4" style="display: none">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Memuat pohon keluarga...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Tambah/Edit -->
+    <div class="modal fade" id="memberModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Form Anggota Keluarga</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <form id="addMemberForm" enctype="multipart/form-data">
+              <input type="hidden" id="editingId" name="id" />
+              <div class="mb-3">
+                <input
+                  type="text"
+                  id="name"
+                  name="name"
+                  class="form-control"
+                  placeholder="Nama Anggota"
+                  required
+                />
+              </div>
+              <div class="mb-3">
+                <label>Upload Foto</label>
+                <input
+                  type="file"
+                  id="photo"
+                  name="photo"
+                  class="form-control"
+                  accept="image/*"
+                />
+              </div>
+              <div class="mb-3">
+                <input
+                  type="text"
+                  id="spouse"
+                  name="spouse"
+                  class="form-control"
+                  placeholder="Nama Pasangan"
+                />
+              </div>
+              <div class="mb-3">
+                <label>Upload Foto Pasangan</label>
+                <input
+                  type="file"
+                  id="spousePhoto"
+                  name="spousePhoto"
+                  class="form-control"
+                  accept="image/*"
+                />
+              </div>
+              <div class="mb-3">
+                <select id="parent" name="parent_id" class="form-select">
+                  <option value="">Sebagai Akar</option>
+                </select>
+              </div>
+              <button type="submit" class="btn btn-primary w-100">
+                Simpan
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let members = [],
+        editingId = null;
+
+      function renderTree() {
+        const ct = document.getElementById("familyTree"),
+          sel = document.getElementById("parent");
+        ct.innerHTML = buildTreeHTML(null);
+        sel.innerHTML = '<option value="">Sebagai Akar</option>';
+        members.forEach(
+          (m) => (sel.innerHTML += `<option value="${m.id}">${m.name}</option>`)
+        );
+      }
+
+      function buildTreeHTML(pid) {
+        const kids = members.filter((m) => m.parent_id == pid);
+        if (!kids.length) return "";
+        let html = "<ul>";
+        kids.forEach((c) => {
+          const hasSp = !!c.spouse;
+          html += `<li>
+          <div class="member ${!hasSp ? "small" : ""}">
+            <img src="${c.photo || "https://via.placeholder.com/48"}" alt>
+            <div class="info">
+              <div><a href="view_tree.php?id=${c.id}" class="text-white text-decoration-underline">${c.name}</a></div>
+              <small>${hasSp ? "❤️ " + c.spouse : ""}</small>
+            </div>
+            ${
+              c.spouse_photo
+                ? `<img src="${c.spouse_photo}" style="width:40px;height:40px;border-radius:50%;border:2px solid white">`
+                : ""
+            }
+            <div class="actions">
+              <button class="btn btn-sm btn-light" onclick="editMember(${
+                c.id
+              })">✏️</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteMember(${
+                c.id
+              })">🗑️</button>
+            </div>
+          </div>
+          ${buildTreeHTML(c.id)}
+        </li>`;
+        });
+        return html + "</ul>";
+      }
+
+      function loadMembers() {
+        const spinner = document.getElementById("treeLoading"),
+          ct = document.getElementById("familyTree");
+        spinner.style.display = "block";
+        ct.innerHTML = "";
+        fetch("get_members.php")
+          .then((r) => r.json())
+          .then((r) => {
+            if (r.status === "success") {
+              members = r.data;
+              renderTree();
+            } else {
+              console.error(r.message);
+            }
+          })
+          .catch((e) => console.error(e))
+          .finally(() => (spinner.style.display = "none"));
+      }
+
+      // Edit via AJAX
+      function editMember(id) {
+        fetch(`get_member.php?id=${id}`)
+          .then((r) => r.json())
+          .then((r) => {
+            if (r.status === "success") {
+              const m = r.data;
+              editingId = m.id;
+              document.getElementById("editingId").value = m.id;
+              document.getElementById("name").value = m.name;
+              document.getElementById("spouse").value = m.spouse || "";
+              document.getElementById("parent").value = m.parent_id || "";
+              new bootstrap.Modal(
+                document.getElementById("memberModal")
+              ).show();
+            } else {
+              alert(r.message);
+            }
+          });
+      }
+
+      document
+        .getElementById("addMemberForm")
+        .addEventListener("submit", function (e) {
+          e.preventDefault();
+          const fd = new FormData(this);
+          fetch("save_member.php", { method: "POST", body: fd })
+            .then((r) => r.json())
+            .then((r) => {
+              if (r.status === "success") {
+                loadMembers();
+                this.reset();
+                editingId = null;
+                bootstrap.Modal.getInstance(
+                  document.getElementById("memberModal")
+                ).hide();
+              } else {
+                alert(r.message);
+              }
+            })
+            .catch((e) => {
+              console.error(e);
+              alert("Gagal menyimpan.");
+            });
+        });
+
+      function deleteMember(id) {
+        if (!confirm("Yakin hapus?")) return;
+        fetch("delete_member.php", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `id=${id}`,
+        })
+          .then((r) => r.json())
+          .then((r) => {
+            if (r.status === "success") loadMembers();
+            else alert(r.message);
+          })
+          .catch((e) => console.error(e));
+      }
+
+      function downloadTree() {
+        html2pdf()
+          .set({
+            margin: 0.5,
+            filename: "pohon-keluarga.pdf",
+            image: { type: "jpeg", quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: "in", format: "a4", orientation: "landscape" },
+          })
+          .from(document.getElementById("familyTree"))
+          .save();
+      }
+
+      // initial
+      loadMembers();
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>
